@@ -3,6 +3,7 @@
 #include "../include/mesh.hh"
 #include "../include/matrices.hh"
 #include "../include/hotshaders.hh"
+#include "../include/trackball.hh"
 #include <SFML/Window.hpp>
 #include <iostream>
 #include <optional>
@@ -63,6 +64,151 @@ public:
     ~Setup ()
     {
         delete window;
+    }
+};
+
+class Camera
+{
+public:
+    glm::mat4 v;
+    glm::mat4 inv_v;
+    glm::mat4 vp;
+
+private:
+    /** Intrinsic camera parameters **/
+    const float normal_fd = 50.0 / 18.0; 
+    const float tele_fd =  400.0 / 18.0;
+    const float wide_fd = 24 / 18.0;
+    float fd; // focal distance
+    float ar; // aspect ratio
+
+    /** Extrinsic camera parameters **/
+    // xyz, camera position (fixed in world coordinates)
+    glm::vec3 camera_pos = {0.0, 0.0, 0.0};
+    GLint camera_pos_loc;
+    // The Trackball contains the object rotation relative to the fixed camera position
+    fcg::Trackball trackball;
+    // object distance, relative to the fixed camera position
+    float od;
+
+public:
+    Camera (fcg::Shaders& shaders)
+    {
+        locations (shaders);
+        lens_normal ();
+        set_window_size (Setup::window_width, Setup::window_height);        
+        view_projection ();
+    }
+
+    void locations (fcg::Shaders& shaders)
+    {
+        camera_pos_loc = glGetUniformLocation (shaders.program, "camera_pos");
+    }
+
+    void set_window_size (int w, int h)
+    {
+        trackball.set_window_size (w, h);
+        ar = ((float) w) / (float) h;
+        trackball.set_view (od, 1.0f / (fd * ar));
+        view_projection ();
+    }
+
+    void start_rotate (float x, float y)
+    {
+        trackball.start (x, y);
+    }
+
+    void stop_rotate ()
+    {
+        trackball.stop ();
+    }
+
+    bool rotate (float x, float y)
+    {
+        bool moved = trackball.move (x, y);
+        if (moved)
+            view_projection ();
+        return moved;
+    }
+
+    void zoom (float dy)
+    {
+        float ratio = fd / 100.0;
+        fd += dy * ratio;
+        if (fd < 0.1)
+            fd = 0.1;
+        trackball.set_view (od, 1.0f / (fd * ar));
+        view_projection ();
+    }
+
+    void distance (float dy)
+    {
+        float ratio = od / 100.0;
+        od -= dy * ratio; // note: we go in the opposite direction of zoooming
+        if (od < 0.5)
+            od = 0.5;
+        trackball.set_view (od, 1.0f / (fd * ar));
+        view_projection ();
+    }
+
+    void lens_tele ()
+    {
+        fd = tele_fd;
+        od = tele_fd;
+        trackball.set_view (od, 1.0f / (fd * ar));
+        view_projection ();
+    }
+
+    void lens_normal ()
+    {
+        fd = normal_fd;
+        od = normal_fd;
+        trackball.set_view (od, 1.0f / (fd * ar));
+        view_projection ();
+    }
+
+    void lens_wide ()
+    {
+        fd = wide_fd;
+        od = wide_fd;
+        trackball.set_view (od, 1.0f / (fd * ar));
+        view_projection ();
+    }
+
+    void view_projection ()
+    {
+
+        float ncp = od - 4.0; // distance near clip plane
+        if (ncp < 0.0001)
+            ncp = 0.0001;
+        float fcp = od + 4.0; // distance far clip plane
+
+        // rotation matrix from trackball
+        glm::mat4 r = trackball.rotation_matrix ();
+
+        // prepare translation matrix
+        glm::mat4 tz = fcg::translation (0.0, 0.0, -od);
+
+        // prepare projection matrix
+        float a = (fcp + ncp) / (ncp - fcp);       // coefficient 3rd col
+        float b = 2.0 * fcp * ncp / (ncp - fcp);   // coefficient 4th col
+
+        glm::mat4 pr = glm::mat4(
+                                 fd,  0.0,     0.0,  0.0,    // 1st column
+                                 0.0, fd * ar, 0.0,  0.0,    // 2nd column
+                                 0.0, 0.0,       a, -1.0,    // 3rd column
+                                 0.0, 0.0,       b,  0.0     // 4th column
+                                 );
+
+        // Compute VP matrix and update it
+        v = tz * r;
+        vp = pr * v;
+        inv_v = glm::inverse (v);
+
+        glm::vec4 cp4 = {0.0, 0.0, 0.0, 1.0};
+        cp4 = inv_v * cp4;
+        glm::vec3 cp3 = {cp4.x, cp4.y, cp4.z};
+        glUniform3fv(camera_pos_loc, 1, &cp3[0]);
     }
 };
 
@@ -194,14 +340,36 @@ protected:
 class Scene
 {
     public:
+        Camera camera;
         GPUMesh sphere;
+    private:
+        GLint model_loc;
+        GLint vp_loc;
     public:
-        Scene() : 
-            sphere ("../Risorse/sphere.off"){}
+        Scene(fcg::Shaders& shaders) : 
+            camera(shaders),
+            sphere ("../Risorse/sphere.off")
+        {
+            locations(shaders);
+            camera.view_projection();
+        }
+        
+        void locations(fcg::Shaders& shaders)
+        {
+            camera.locations(shaders);
+
+            model_loc = glGetUniformLocation(shaders.program, "model");
+            vp_loc = glGetUniformLocation(shaders.program, "vp");
+        }
 
         void draw ()
         {
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+            glUniformMatrix4fv(vp_loc,1,GL_FALSE, &camera.vp[0][0]);
+
+            glm::mat4 mm = sphere.to_unit_extent;
+            glUniformMatrix4fv(model_loc,1,GL_FALSE, &mm[0][0]);
 
             sphere.draw();
         }
@@ -213,9 +381,10 @@ class Scene
 //SFML Callbacks//
 //////////////////
 
-void handle(const sf::Event::Resized& resized)
+void handle(const sf::Event::Resized& resized, Camera& camera)
 {
     glViewport(0,0,resized.size.x,resized.size.y);
+    camera.set_window_size (resized.size.x,resized.size.y);
 }
 
 void handle(const sf::Event::KeyPressed& key_pressed)
@@ -225,6 +394,40 @@ void handle(const sf::Event::KeyPressed& key_pressed)
         exit (0);
     default:
         return;
+    }
+}
+
+void handle (const sf::Event::MouseButtonPressed& mouse_pressed, Camera& camera)
+{
+    if (mouse_pressed.button == sf::Mouse::Button::Right) {
+        float x = mouse_pressed.position.x;
+        float y = mouse_pressed.position.y;
+        camera.start_rotate (x, y);
+    }
+}
+
+void handle (const sf::Event::MouseButtonReleased& mouse_released, Camera& camera)
+{
+    if (mouse_released.button == sf::Mouse::Button::Right)
+        camera.stop_rotate ();
+}
+
+void handle (const sf::Event::MouseMoved& mouse_moved, Scene& scene)
+{
+    float x = mouse_moved.position.x;
+    float y = mouse_moved.position.y;
+
+    static float prev_y = 0;
+    float dy = y - prev_y; 
+    prev_y = y;
+
+    if (scene.camera.rotate (x, y))
+        return;
+    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LControl)) {
+        scene.camera.zoom (dy);
+    }
+    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LAlt)) {
+        scene.camera.distance (dy);
     }
 }
 
@@ -239,7 +442,7 @@ int main(int argc, char* argv[])
 
     fcg::Shaders shaders("../Tappa01/vertex_shader.vert","../Tappa01/fragment_shader.frag");
     shaders.use();
-    Scene scene;
+    Scene scene (shaders);
 
     glEnable (GL_CULL_FACE);
     glCullFace (GL_BACK);
@@ -254,10 +457,20 @@ int main(int argc, char* argv[])
                 running = false;
             }
             else if (const auto* resized = event->getIf<sf::Event::Resized>()) {
-                handle(*resized);
+                handle(*resized,scene.camera);
             }
-            else if (const auto* key_pressed = event->getIf<sf::Event::KeyPressed> ())
+            else if (const auto* key_pressed = event->getIf<sf::Event::KeyPressed> ()){
                 handle (*key_pressed);
+            }
+            else if(const auto* mouse_pressed = event->getIf<sf::Event::MouseButtonPressed> ()){
+                handle (*mouse_pressed, scene.camera);
+            }
+            else if(const auto* mouse_released = event->getIf<sf::Event::MouseButtonReleased> ()){
+                handle (*mouse_released, scene.camera);
+            }
+            else if(const auto* mouse_moved = event->getIf<sf::Event::MouseMoved> ()){
+                handle (*mouse_moved, scene);
+            }
         }
 
         scene.draw();
