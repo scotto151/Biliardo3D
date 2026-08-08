@@ -67,6 +67,54 @@ public:
     }
 };
 
+class Lights
+{
+    public:
+        glm::vec3 light_direct_pos = {0.0f ,0.8f ,0.0f};
+        glm::vec3 light_direct_val = {1.0f ,1.0f ,1.0f};
+        glm::vec3 light_ambient_val = {0.1f ,0.1f ,0.1f};
+
+        glm::vec3 material_diffuse = {0.85f, 0.15f, 0.15f};
+        glm::vec3 material_ambient = {0.20f, 0.04f, 0.04f};
+        glm::vec3 material_specular = {1.0f, 1.0f, 1.0f};
+        float material_shininess = 80.0f;
+
+    private:
+        GLint light_direct_pos_loc;
+        GLint light_direct_val_loc;
+        GLint light_ambient_val_loc;
+        GLint material_diffuse_loc;
+        GLint material_ambient_loc;
+        GLint material_specular_loc;
+        GLint material_shininess_loc;
+    public:
+        Lights (fcg::Shaders& shaders)
+        {
+            locations(shaders);
+        }
+        void locations(fcg::Shaders& shaders)
+        {
+            light_direct_pos_loc = glGetUniformLocation (shaders.program, "light.direct_pos");
+            light_direct_val_loc = glGetUniformLocation (shaders.program, "light.direct_val");
+            light_ambient_val_loc = glGetUniformLocation (shaders.program, "light.ambient_val");
+            material_diffuse_loc = glGetUniformLocation (shaders.program, "material.diffuse");
+            material_ambient_loc = glGetUniformLocation (shaders.program, "material.ambient");
+            material_specular_loc = glGetUniformLocation (shaders.program, "material.specular");
+            material_shininess_loc = glGetUniformLocation (shaders.program, "material.shininess");
+
+        }
+        void send_parameters()
+        {
+            glUniform3fv(light_direct_pos_loc, 1, &light_direct_pos[0]);
+            glUniform3fv(light_direct_val_loc, 1, &light_direct_val[0]);
+            glUniform3fv(light_ambient_val_loc, 1, &light_ambient_val[0]);
+            glUniform3fv(material_diffuse_loc, 1, &material_diffuse[0]);
+            glUniform3fv(material_ambient_loc, 1, &material_ambient[0]);
+            glUniform3fv(material_specular_loc, 1, &material_specular[0]);
+            glUniform1f(material_shininess_loc, material_shininess);
+        }
+};
+
 class Camera
 {
 public:
@@ -341,6 +389,7 @@ class Scene
 {
     public:
         Camera camera;
+        Lights lights;
         GPUMesh sphere;
     private:
         GLint model_loc;
@@ -349,15 +398,18 @@ class Scene
     public:
         Scene(fcg::Shaders& shaders) : 
             camera(shaders),
+            lights(shaders),
             sphere ("../Risorse/sphere.off")
         {
             locations(shaders);
             camera.view_projection();
+            lights.send_parameters();
         }
         
         void locations(fcg::Shaders& shaders)
         {
             camera.locations(shaders);
+            lights.locations(shaders);
 
             model_loc = glGetUniformLocation(shaders.program, "model");
             vp_loc = glGetUniformLocation(shaders.program, "vp");
