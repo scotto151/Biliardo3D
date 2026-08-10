@@ -184,6 +184,12 @@ namespace fcg
             const float half_width = half_height * aspect;
             return std::min (half_width, half_height);
         }
+
+        void set_rotation(const glm::quat& q)
+        {
+            current_rotation = q;
+            drag_rotation = glm::quat (1.0f, 0.0f, 0.0f, 0.0f);
+        }
     };
 
 }

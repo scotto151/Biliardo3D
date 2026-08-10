@@ -12,15 +12,15 @@
 
 
 namespace game {
-    constexpr float ball_radius = 0.0128f;
-    constexpr float table_length = 0.5f;
-    constexpr float table_width = 0.25f;
-    constexpr float cloth_height = 0.01f;
-    constexpr float rail_width = 0.03f;
-    constexpr float rail_height = 0.028f;
-    constexpr float leg_height = 0.14f;
-    constexpr float leg_width = 0.035f;
-    constexpr float table_height = 0.04f;
+    constexpr float ball_radius = 0.0256f;
+    constexpr float table_length = 1.0f;
+    constexpr float table_width = 0.5f;
+    constexpr float cloth_height = 0.02f;
+    constexpr float rail_width = 0.06f;
+    constexpr float rail_height = 0.056f;
+    constexpr float leg_height = 0.28f;
+    constexpr float leg_width = 0.070f;
+    constexpr float table_height = 0.08f;
 }
 
 
@@ -198,7 +198,7 @@ public:
     void lens_normal ()
     {
         fd = normal_fd;
-        od = normal_fd * 1.5;
+        od = normal_fd * 0.8;
         trackball.set_view (od, 1.0f / (fd * ar));
         view_projection ();
     }
@@ -250,6 +250,14 @@ public:
     void send_position()
     {
         shaders->set("camera_pos", camera_pos);
+    }
+
+    void set_initial_view(float x_deg, float y_deg)
+    {
+        glm::quat x = glm::angleAxis(glm::radians(x_deg), glm::vec3(1.0f,0.0f,0.0f));
+        glm::quat y = glm::angleAxis(glm::radians(y_deg), glm::vec3(0.0f,1.0f,0.0f));
+        trackball.set_rotation(x * y);
+        view_projection();
     }
 };
 
@@ -402,7 +410,7 @@ class Scene
             sphere ("../Risorse/sphere.off"),
             cube ("../Risorse/cube.off")
         {
-            camera.view_projection();
+            camera.set_initial_view(30.0f, 90.0f);
             lights.send_parameters();
         }
 
