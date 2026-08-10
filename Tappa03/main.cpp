@@ -18,6 +18,9 @@ namespace game {
     constexpr float cloth_height = 0.01f;
     constexpr float rail_width = 0.03f;
     constexpr float rail_height = 0.028f;
+    constexpr float leg_height = 0.14f;
+    constexpr float leg_width = 0.035f;
+    constexpr float table_height = 0.04f;
 }
 
 
@@ -389,6 +392,7 @@ class Scene
         Material ball_mat = {{0.85f, 0.15f, 0.15f}, {0.20f, 0.04f, 0.04f}, {1.0f, 1.0f, 1.0f}, 80.0f};
         Material table_mat = {{0.10f, 0.35f, 0.18f}, {0.03f, 0.09f, 0.05f}, {0.02f, 0.02f, 0.02f}, 4.0f};
         Material rail_mat = {{0.16f, 0.48f, 0.26f}, {0.05f, 0.14f, 0.08f}, {0.08f, 0.08f, 0.08f}, 12.0f};
+        Material wood = {{0.30f, 0.18f, 0.10f}, {0.09f, 0.05f, 0.03f}, {0.15f, 0.15f, 0.15f}, 20.0f};
 
     public:
         Scene(fcg::Shaders& shaders) : 
@@ -454,7 +458,7 @@ class Scene
             scale = fcg::scaling(game::table_length, game::cloth_height, game::table_width);
             translate = fcg::translation(0.0f, -game::cloth_height * 0.5f, 0.0f);
             mm = parent_mm * translate * scale;
-            draw_mesh(cube, mm, table_mat,"phong");
+            draw_mesh(cube, mm, table_mat,"flat");
 
             scale = fcg::scaling(game::table_length + 2.0f * game::rail_width,game::rail_height + game::cloth_height,game::rail_width);
             translate = fcg::translation(0.0f, (game::rail_height - game::cloth_height) * 0.5f, -(game::table_width + game::rail_width)*0.5f);
@@ -473,6 +477,23 @@ class Scene
             translate = fcg::translation((game::table_length + game::rail_width) * 0.5f, (game::rail_height - game::cloth_height) * 0.5f, 0.0f);
             mm = parent_mm * translate * scale;
             draw_mesh(cube, mm, rail_mat,"flat");
+
+            scale = fcg::scaling(game::table_length + game::rail_width * 2.0f, game::table_height, game::table_width + game::rail_width * 2.0f);
+            translate = fcg::translation(0.0f, -game::cloth_height - game:: table_height * 0.5f, 0.0f);
+            mm = parent_mm * translate * scale;
+            draw_mesh(cube, mm, wood, "flat");
+
+            scale = fcg::scaling(game::leg_width, game::leg_height, game::leg_width);
+            float leg_x = game::table_length * 0.5f - game::leg_width;
+            float leg_y = -(game::cloth_height + game::table_height + game::leg_height * 0.5f);
+            float leg_z = game::table_width * 0.5f - game::leg_width;
+            for(float sign_x : {-1.0f, 1.0f}){
+                for(float sign_z : {-1.0f, 1.0f}){
+                    translate = fcg::translation(sign_x * leg_x, leg_y, sign_z * leg_z);
+                    mm = parent_mm * translate * scale;
+                    draw_mesh(cube, mm, wood, "flat");
+                }
+            }
 
         }
 };
