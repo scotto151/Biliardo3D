@@ -2,7 +2,7 @@
 #include "glad/gl.h"
 #include "../include/mesh.hh"
 #include "../include/matrices.hh"
-#include "../include/hotshaders.hh"
+#include "../include/multishaders.hh"
 #include "../include/trackball.hh"
 #include <SFML/Window.hpp>
 #include <iostream>
@@ -80,29 +80,19 @@ public:
 class Lights
 {
     public:
-        glm::vec3 light_direct_pos = {0.0f ,0.8f ,0.0f};
+        glm::vec3 light_direct_pos = {0.0f ,0.5f ,0.0f};
         glm::vec3 light_direct_val = {1.0f ,1.0f ,1.0f};
         glm::vec3 light_ambient_val = {0.35f ,0.35f ,0.35f};
     private:
-        GLint light_direct_pos_loc;
-        GLint light_direct_val_loc;
-        GLint light_ambient_val_loc;
+        fcg::Shaders* shaders = nullptr;
     public:
-        Lights (fcg::Shaders& shaders)
-        {
-            locations(shaders);
-        }
-        void locations(fcg::Shaders& shaders)
-        {
-            light_direct_pos_loc = glGetUniformLocation (shaders.program, "light.direct_pos");
-            light_direct_val_loc = glGetUniformLocation (shaders.program, "light.direct_val");
-            light_ambient_val_loc = glGetUniformLocation (shaders.program, "light.ambient_val");
-        }
+        Lights (fcg::Shaders& shaders) : shaders(&shaders) { }
+        
         void send_parameters()
         {
-            glUniform3fv(light_direct_pos_loc, 1, &light_direct_pos[0]);
-            glUniform3fv(light_direct_val_loc, 1, &light_direct_val[0]);
-            glUniform3fv(light_ambient_val_loc, 1, &light_ambient_val[0]);
+            shaders->set("light.direct_pos",light_direct_pos);
+            shaders->set("light.direct_val", light_direct_val);
+            shaders->set("light.ambient_val",light_ambient_val);
         }
 };
 
@@ -132,24 +122,20 @@ private:
     /** Extrinsic camera parameters **/
     // xyz, camera position (fixed in world coordinates)
     glm::vec3 camera_pos = {0.0, 0.0, 0.0};
-    GLint camera_pos_loc;
     // The Trackball contains the object rotation relative to the fixed camera position
     fcg::Trackball trackball;
     // object distance, relative to the fixed camera position
     float od;
+    fcg::Shaders* shaders = nullptr;
 
 public:
-    Camera (fcg::Shaders& shaders)
+    Camera (fcg::Shaders& shaders) :
+    shaders(&shaders)
     {
-        locations (shaders);
+        
         lens_normal ();
         set_window_size (Setup::window_width, Setup::window_height);        
         view_projection ();
-    }
-
-    void locations (fcg::Shaders& shaders)
-    {
-        camera_pos_loc = glGetUniformLocation (shaders.program, "camera_pos");
     }
 
     void set_window_size (int w, int h)
@@ -254,8 +240,13 @@ public:
 
         glm::vec4 cp4 = {0.0, 0.0, 0.0, 1.0};
         cp4 = inv_v * cp4;
-        glm::vec3 cp3 = {cp4.x, cp4.y, cp4.z};
-        glUniform3fv(camera_pos_loc, 1, &cp3[0]);
+        camera_pos = {cp4.x,cp4.y,cp4.z};
+        send_position();
+    }
+
+    void send_position()
+    {
+        shaders->set("camera_pos", camera_pos);
     }
 };
 
@@ -386,6 +377,9 @@ protected:
 
 class Scene
 {
+    private:
+        fcg::Shaders* shaders = nullptr;
+        std::string current_shader = "";
     public:
         Camera camera;
         Lights lights;
@@ -394,67 +388,60 @@ class Scene
 
         Material ball_mat = {{0.85f, 0.15f, 0.15f}, {0.20f, 0.04f, 0.04f}, {1.0f, 1.0f, 1.0f}, 80.0f};
         Material table_mat = {{0.10f, 0.35f, 0.18f}, {0.03f, 0.09f, 0.05f}, {0.02f, 0.02f, 0.02f}, 4.0f};
-        GLint model_loc;
-        GLint vp_loc;
-        GLint tr_inv_model_loc;
-        GLint material_diffuse_loc;
-        GLint material_ambient_loc;
-        GLint material_specular_loc;
-        GLint material_shininess_loc;
+        Material rail_mat = {{0.16f, 0.48f, 0.26f}, {0.05f, 0.14f, 0.08f}, {0.08f, 0.08f, 0.08f}, 12.0f};
+
     public:
         Scene(fcg::Shaders& shaders) : 
+            shaders(&shaders),
             camera(shaders),
             lights(shaders),
             sphere ("../Risorse/sphere.off"),
             cube ("../Risorse/cube.off")
         {
-            locations(shaders);
             camera.view_projection();
             lights.send_parameters();
-        }
-        
-        void locations(fcg::Shaders& shaders)
-        {
-            camera.locations(shaders);
-            lights.locations(shaders);
-
-            model_loc = glGetUniformLocation(shaders.program, "model");
-            vp_loc = glGetUniformLocation(shaders.program, "vp");
-            tr_inv_model_loc = glGetUniformLocation(shaders.program, "tr_inv_model");
-            material_diffuse_loc = glGetUniformLocation(shaders.program, "material.diffuse");
-            material_ambient_loc = glGetUniformLocation(shaders.program, "material.ambient");
-            material_specular_loc = glGetUniformLocation(shaders.program, "material.specular");
-            material_shininess_loc = glGetUniformLocation(shaders.program, "material.shininess");
         }
 
         void draw ()
         {
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-            glUniformMatrix4fv(vp_loc,1,GL_FALSE, &camera.vp[0][0]);
+            current_shader = "";
 
             draw_table(fcg::identity());
 
             glm::mat4 ball_mm = fcg::translation(0.0f, game::ball_radius, 0.0f) * fcg::scaling(2.0f * game::ball_radius);
-            draw_mesh(sphere, ball_mm, ball_mat);
+            draw_mesh(sphere, ball_mm, ball_mat, "phong");
+        }
+
+        void use_shader(const std::string& name)
+        {
+            if(name==current_shader) return;
+
+            shaders->use(name);
+            current_shader = name;
+
+            shaders->set("vp", camera.vp);
+            camera.send_position();
+            lights.send_parameters();
         }
 
     private:
         void send_material(const Material& m)
         {
-            glUniform3fv(material_diffuse_loc,1,&m.diffuse[0]);
-            glUniform3fv(material_ambient_loc,1,&m.ambient[0]);
-            glUniform3fv(material_specular_loc,1,&m.specular[0]);
-            glUniform1f(material_shininess_loc,m.shininess);
+            shaders->set("material.diffuse", m.diffuse);
+            shaders->set("material.ambient", m.ambient);
+            shaders->set("material.specular", m.specular);
+            shaders->set("material.shininess", m.shininess);
         }
 
-        void draw_mesh(GPUMesh& mesh, const glm::mat4& parent_mm, const Material& m)
+        void draw_mesh(GPUMesh& mesh, const glm::mat4& parent_mm, const Material& m, const std::string& shader_name)
         {
+            use_shader(shader_name);
+
             glm::mat4 mm = parent_mm * mesh.to_unit_extent;
             glm::mat3 ti_mm = glm::transpose(glm::inverse(glm::mat3 (mm)));
-
-            glUniformMatrix4fv(model_loc,1,GL_FALSE,&mm[0][0]);
-            glUniformMatrix3fv(tr_inv_model_loc,1,GL_FALSE,&ti_mm[0][0]);
+            shaders->set("model", mm);
+            shaders->set("tr_inv_model", ti_mm);
             send_material(m);
 
             mesh.draw();
@@ -467,25 +454,25 @@ class Scene
             scale = fcg::scaling(game::table_length, game::cloth_height, game::table_width);
             translate = fcg::translation(0.0f, -game::cloth_height * 0.5f, 0.0f);
             mm = parent_mm * translate * scale;
-            draw_mesh(cube, mm, table_mat);
+            draw_mesh(cube, mm, table_mat,"phong");
 
             scale = fcg::scaling(game::table_length + 2.0f * game::rail_width,game::rail_height + game::cloth_height,game::rail_width);
             translate = fcg::translation(0.0f, (game::rail_height - game::cloth_height) * 0.5f, -(game::table_width + game::rail_width)*0.5f);
             mm = parent_mm * translate * scale;
-            draw_mesh(cube, mm, table_mat);
+            draw_mesh(cube, mm, rail_mat,"flat");
 
             translate = fcg::translation(0.0f, (game::rail_height - game::cloth_height) * 0.5f, (game::table_width + game::rail_width)*0.5f);
             mm = parent_mm * translate * scale;
-            draw_mesh(cube, mm, table_mat);
+            draw_mesh(cube, mm, rail_mat,"flat");
 
             scale = fcg::scaling(game::rail_width, game::rail_height + game::cloth_height, game::table_width);
             translate = fcg::translation(-(game::table_length + game::rail_width) * 0.5f, (game::rail_height - game::cloth_height) * 0.5f, 0.0f);
             mm = parent_mm * translate * scale;
-            draw_mesh(cube, mm, table_mat);
+            draw_mesh(cube, mm, rail_mat,"flat");
 
             translate = fcg::translation((game::table_length + game::rail_width) * 0.5f, (game::rail_height - game::cloth_height) * 0.5f, 0.0f);
             mm = parent_mm * translate * scale;
-            draw_mesh(cube, mm, table_mat);
+            draw_mesh(cube, mm, rail_mat,"flat");
 
         }
 };
@@ -555,8 +542,10 @@ int main(int argc, char* argv[])
     Setup setup;
     sf::Window& window = *setup.window;
 
-    fcg::Shaders shaders("../Tappa03/vertex_shader.vert","../Tappa03/fragment_shader.frag");
-    shaders.use();
+    fcg::Shaders shaders;
+    shaders.add("phong","../Tappa03/vertex_shader.vert","../Tappa03/fragment_shader.frag");
+    shaders.add("flat","../Tappa03/vertex_shader.vert","../Tappa03/fragment_flat.frag");
+    shaders.use("flat");
     Scene scene (shaders);
 
     glEnable (GL_CULL_FACE);
