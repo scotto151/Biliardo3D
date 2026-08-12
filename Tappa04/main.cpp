@@ -21,6 +21,10 @@ namespace game {
     constexpr float leg_height = 0.28f;
     constexpr float leg_width = 0.070f;
     constexpr float table_height = 0.08f;
+    constexpr float table_friction = 0.6f;
+    constexpr float min_speed = 0.01f;
+    constexpr float x_boundary = table_length * 0.5f - ball_radius;
+    constexpr float z_boundary = table_width * 0.5f - ball_radius;
 }
 
 
@@ -388,6 +392,7 @@ protected:
 
 struct Ball{
     glm::vec3 pos = {0.0f, game::ball_radius, 0.0f};
+    glm::vec3 vel = {0.7f, 0.0f, 0.3f};
 };
 
 class Physics{
@@ -397,6 +402,38 @@ class Physics{
         Physics() 
         {
             active_balls.push_back(Ball());
+        }
+
+        void update_position(float dt)
+        {
+            for(auto& b : active_balls){
+                b.pos += b.vel * dt;
+                b.vel *= 1.0f - game::table_friction * dt;
+                if(std::abs(b.vel.x)<game::min_speed) b.vel.x = 0.0f;
+                if(std::abs(b.vel.z)<game::min_speed) b.vel.z = 0.0f; 
+            }
+        }
+        void detect_rail_collisions()
+        {
+            for(auto& b : active_balls)
+            {
+                if(b.pos.x > game::x_boundary){
+                    b.vel.x *= -1.0f;
+                    b.pos.x = game::x_boundary;
+                }
+                if(b.pos.x < -game::x_boundary){
+                    b.vel.x *= -1.0f;
+                    b.pos.x = -game::x_boundary;
+                }
+                if(b.pos.z > game::z_boundary){
+                    b.vel.z *= -1.0f;
+                    b.pos.z = game::z_boundary;
+                }
+                if(b.pos.z < -game::z_boundary){
+                    b.vel.z *= -1.0f;
+                    b.pos.z = -game::z_boundary;
+                }
+            }
         }
 };
 
@@ -601,6 +638,7 @@ int main(int argc, char* argv[])
     glEnable (GL_DEPTH_TEST);
 
     bool running = true;
+    sf::Clock clock;
     while (running)
     {
         while (const std::optional event = window.pollEvent())
@@ -624,6 +662,9 @@ int main(int argc, char* argv[])
                 handle (*mouse_moved, scene);
             }
         }
+
+        scene.physics.update_position(clock.restart().asSeconds());
+        scene.physics.detect_rail_collisions();
 
         scene.draw();
         window.display();
