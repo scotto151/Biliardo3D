@@ -32,6 +32,10 @@ target_include_directories(common INTERFACE include)
 
 find_package(OpenGL REQUIRED)
 
+if(APPLE)
+    find_library(CORE_GRAPHICS_LIB CoreGraphics REQUIRED)
+endif()
+
 add_executable(Tappa01 Tappa01/main.cpp)
 target_link_libraries(Tappa01 PRIVATE 
     common 
@@ -50,6 +54,14 @@ target_link_libraries(Tappa02 PRIVATE
 
 add_executable(Tappa03 Tappa03/main.cpp)
 target_link_libraries(Tappa03 PRIVATE 
+    common 
+    SFML::Window 
+    OpenGL::GL
+    glm::glm-header-only
+)
+
+add_executable(Tappa04 Tappa04/main.cpp)
+target_link_libraries(Tappa04 PRIVATE 
     common 
     SFML::Window 
     OpenGL::GL
