@@ -404,7 +404,7 @@ class Physics{
             active_balls.push_back(Ball());
         }
 
-        void update_position(float dt)
+        void update(float dt)
         {
             for(auto& b : active_balls){
                 b.pos += b.vel * dt;
@@ -663,7 +663,7 @@ int main(int argc, char* argv[])
             }
         }
 
-        scene.physics.update_position(clock.restart().asSeconds());
+        scene.physics.update(clock.restart().asSeconds());
         scene.physics.detect_rail_collisions();
 
         scene.draw();
