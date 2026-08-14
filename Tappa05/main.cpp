@@ -89,7 +89,7 @@ class Lights
     public:
         glm::vec3 light_direct_pos = {0.0f ,0.5f ,0.0f};
         glm::vec3 light_direct_val = {1.0f ,1.0f ,1.0f};
-        glm::vec3 light_ambient_val = {0.35f ,0.35f ,0.35f};
+        glm::vec3 light_ambient_val = {1.0f ,1.0f ,1.0f};
     private:
         fcg::Shaders* shaders = nullptr;
     public:
@@ -473,7 +473,7 @@ class Scene
         GPUMesh sphere;
         GPUMesh cube;
         Physics physics;
-        static constexpr glm::vec3 diffuse_balls[7] = {
+        static constexpr glm::vec3 diffuse_mats[7] = {
             {0.92f, 0.72f, 0.08f},
             {0.08f, 0.22f, 0.62f},
             {0.85f, 0.15f, 0.15f},
@@ -509,7 +509,7 @@ class Scene
             for(const Ball&b : physics.active_balls){
                 glm::mat4 ball_mm = fcg::translation(b.pos) * ball_scale;
                 Material mat = get_material(b.number);
-                draw_mesh(sphere, ball_mm, mat, "phong");
+                draw_mesh(sphere, ball_mm, mat, "phong", b.number > 8);
             }
         }
 
@@ -545,12 +545,12 @@ class Scene
             }
             else{
                 int index = (ball_number % 8) - 1;
-                diffuse = diffuse_balls[index];
+                diffuse = diffuse_mats[index];
             }
             return {diffuse, diffuse * 0.25f, {1.0f,1.0f,1.0f}, 80.0f};
         }
 
-        void draw_mesh(GPUMesh& mesh, const glm::mat4& parent_mm, const Material& m, const std::string& shader_name)
+        void draw_mesh(GPUMesh& mesh, const glm::mat4& parent_mm, const Material& m, const std::string& shader_name, bool isStriped = false)
         {
             use_shader(shader_name);
 
@@ -558,6 +558,7 @@ class Scene
             glm::mat3 ti_mm = glm::transpose(glm::inverse(glm::mat3 (mm)));
             shaders->set("model", mm);
             shaders->set("tr_inv_model", ti_mm);
+            shaders->set("isStriped", isStriped);
             send_material(m);
 
             mesh.draw();
@@ -678,8 +679,8 @@ int main(int argc, char* argv[])
     sf::Window& window = *setup.window;
 
     fcg::Shaders shaders;
-    shaders.add("phong","../Tappa04/vertex_shader.vert","../Tappa05/fragment_phong.frag");
-    shaders.add("flat","../Tappa04/vertex_shader.vert","../Tappa05/fragment_flat.frag");
+    shaders.add("phong","../Tappa05/vertex_shader.vert","../Tappa05/fragment_phong.frag");
+    shaders.add("flat","../Tappa05/vertex_shader.vert","../Tappa05/fragment_flat.frag");
     shaders.use("flat");
     Scene scene (shaders);
 

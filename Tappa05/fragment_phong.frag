@@ -19,6 +19,8 @@ uniform Material material;
 
 in vec3 interpolated_pos;
 in vec3 interpolated_normal;
+in vec3 obj_pos;
+uniform bool isStriped;
 
 out vec4 frag_colour;
 
@@ -26,11 +28,16 @@ void main (void) {
     vec3 pos = interpolated_pos;
     vec3 normal = normalize(interpolated_normal);
 
-    vec3 ambient = material.ambient * light.ambient_val;
+    float stripeHeight = abs(normalize(obj_pos).y);
+    bool striped = isStriped && stripeHeight > 0.70;
+    vec3 diffuse_aux = striped ? vec3(1.0) : material.diffuse;
+    vec3 ambient_aux = striped ? vec3(0.25) : material.ambient;
+
+    vec3 ambient = ambient_aux * light.ambient_val;
 
     vec3 light_dir = normalize (light.direct_pos - pos);
     float diff = max (dot (normal,light_dir), 0.0);
-    vec3 diffuse = material.diffuse * diff * light.direct_val;
+    vec3 diffuse = diffuse_aux * diff * light.direct_val;
 
     vec3 view_dir = normalize (camera_pos - pos);
     vec3 reflect_dir = reflect (-light_dir, normal);

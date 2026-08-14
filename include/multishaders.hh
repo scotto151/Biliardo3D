@@ -1,5 +1,5 @@
-#ifndef HOT_SHADERS_HH
-#define HOT_SHADERS_HH
+#ifndef MULTI_SHADERS_HH
+#define MULTI_SHADERS_HH
 
 #include <string>
 #include <fstream>
@@ -119,6 +119,12 @@ namespace fcg
             if(l!=-1) glUniform1f (l,f);
         }
 
+        void set(const std::string& name, bool value)
+        {
+            GLint l = loc(name);
+            if(l!=-1) glUniform1i (l, value ? 1 : 0);
+        }
+
 
         GLuint load (const std::string vertex_file, const std::string fragment_file)
         {
@@ -229,7 +235,8 @@ namespace fcg
             static const char* names[] = {
                 "model", "vp", "tr_inv_model", "camera_pos",
                 "light.direct_pos", "light.direct_val", "light.ambient_val",
-                "material.diffuse", "material.ambient", "material.specular", "material.shininess"
+                "material.diffuse", "material.ambient", "material.specular", "material.shininess",
+                "isStriped"
             };
 
             for (auto n : names)
