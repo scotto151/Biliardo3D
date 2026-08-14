@@ -393,6 +393,7 @@ protected:
 struct Ball{
     glm::vec3 pos;
     glm::vec3 vel;
+    int number;
 };
 
 class Physics{
@@ -442,19 +443,22 @@ class Physics{
 
         void setup_cue()
         {
-            active_balls.push_back(Ball{{- game::table_length * 0.25f, game::ball_radius, 0.0f}});
+            active_balls.push_back(Ball{{- game::table_length * 0.25f, game::ball_radius, 0.0f},{0,0,0},0});
         }
 
         void setup_rack()
         {
+            int k = 0;
             float x_init = game::table_length * 0.25f;
             for(int row = 0; row <5; row++){
+                float x = x_init + (game::ball_radius * row) * std::sqrt(3.0f);
                 for(int col = 0; col <= row; col++){
-                    float x = x_init + (game::ball_radius * row) * std::sqrt(3.0f);
+                    k++;
                     float z = (col - row * 0.5f) * 2.0f * game::ball_radius;
-                    active_balls.push_back(Ball{{x,game::ball_radius,z}, {0,0,0}}); 
+                    active_balls.push_back(Ball{{x,game::ball_radius,z}, {0,0,0},k}); 
                 }
             }
+            std::swap(active_balls[8].number,active_balls[5].number);
         }
 };
 
@@ -469,8 +473,16 @@ class Scene
         GPUMesh sphere;
         GPUMesh cube;
         Physics physics;
+        static constexpr glm::vec3 diffuse_balls[7] = {
+            {0.92f, 0.72f, 0.08f},
+            {0.08f, 0.22f, 0.62f},
+            {0.85f, 0.15f, 0.15f},
+            {0.32f, 0.13f, 0.42f},
+            {0.88f, 0.42f, 0.04f},
+            {0.08f, 0.42f, 0.18f},
+            {0.42f, 0.09f, 0.13f}
+        };
 
-        Material ball_mat = {{0.85f, 0.15f, 0.15f}, {0.20f, 0.04f, 0.04f}, {1.0f, 1.0f, 1.0f}, 80.0f};
         Material table_mat = {{0.10f, 0.35f, 0.18f}, {0.03f, 0.09f, 0.05f}, {0.02f, 0.02f, 0.02f}, 4.0f};
         Material rail_mat = {{0.16f, 0.48f, 0.26f}, {0.05f, 0.14f, 0.08f}, {0.08f, 0.08f, 0.08f}, 12.0f};
         Material wood = {{0.30f, 0.18f, 0.10f}, {0.09f, 0.05f, 0.03f}, {0.15f, 0.15f, 0.15f}, 20.0f};
@@ -496,7 +508,8 @@ class Scene
             glm::mat4 ball_scale = fcg::scaling(2.0f *game::ball_radius);
             for(const Ball&b : physics.active_balls){
                 glm::mat4 ball_mm = fcg::translation(b.pos) * ball_scale;
-                draw_mesh(sphere, ball_mm, ball_mat, "phong");
+                Material mat = get_material(b.number);
+                draw_mesh(sphere, ball_mm, mat, "phong");
             }
         }
 
@@ -519,6 +532,22 @@ class Scene
             shaders->set("material.ambient", m.ambient);
             shaders->set("material.specular", m.specular);
             shaders->set("material.shininess", m.shininess);
+        }
+
+        Material get_material(int ball_number)
+        {
+            glm::vec3 diffuse;
+            if(ball_number==0){
+                diffuse = {0.92f, 0.90f, 0.85f};
+            }
+            else if(ball_number==8){
+                diffuse = {0.05f, 0.05f, 0.05f};
+            }
+            else{
+                int index = (ball_number % 8) - 1;
+                diffuse = diffuse_balls[index];
+            }
+            return {diffuse, diffuse * 0.25f, {1.0f,1.0f,1.0f}, 80.0f};
         }
 
         void draw_mesh(GPUMesh& mesh, const glm::mat4& parent_mm, const Material& m, const std::string& shader_name)
