@@ -75,3 +75,11 @@ target_link_libraries(Tappa05 PRIVATE
     OpenGL::GL
     glm::glm-header-only
 )
+
+add_executable(Tappa06 Tappa06/main.cpp)
+target_link_libraries(Tappa06 PRIVATE 
+    common 
+    SFML::Window 
+    OpenGL::GL
+    glm::glm-header-only
+)
