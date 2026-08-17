@@ -21,7 +21,7 @@ namespace game {
     constexpr float leg_height = 0.28f;
     constexpr float leg_width = 0.070f;
     constexpr float table_height = 0.08f;
-    constexpr float table_friction = 0.6f;
+    constexpr float table_friction = 0.8f;
     constexpr float min_speed = 0.01f;
     constexpr float x_boundary = table_length * 0.5f - ball_radius;
     constexpr float z_boundary = table_width * 0.5f - ball_radius;
@@ -395,6 +395,7 @@ struct Ball{
     glm::vec3 pos;
     glm::vec3 vel;
     int number;
+    glm::quat orientation = glm::quat (1.0f, 0.0f, 0.0f, 0.0f);
 };
 
 class Physics{
@@ -411,6 +412,12 @@ class Physics{
         {
             for(auto& b : active_balls){
                 b.pos += b.vel * dt;
+                float speed = std::sqrt(b.vel.x * b.vel.x + b.vel.z * b.vel.z);
+                if(speed > game::min_speed){
+                    glm::vec3 axis = glm::cross (glm::vec3 (0.0f, 1.0f, 0.0f), b.vel) / speed;
+                    float angle = (speed * dt) / game::ball_radius;
+                    b.orientation = glm::angleAxis(angle, axis) * b.orientation;
+                }
                 b.vel *= 1.0f - game::table_friction * dt;
                 if(std::abs(b.vel.x)<game::min_speed) b.vel.x = 0.0f;
                 if(std::abs(b.vel.z)<game::min_speed) b.vel.z = 0.0f; 
@@ -478,7 +485,7 @@ class Physics{
 
         void setup_cue()
         {
-            active_balls.push_back(Ball{{- game::table_length * 0.25f, game::ball_radius, 0.0f},{5.0f,0.0f,0.0f},0});
+            active_balls.push_back(Ball{{- game::table_length * 0.25f, game::ball_radius, 0.0f},{2.0f,0.0f,0.0f},0});
         }
 
         void setup_rack()
@@ -542,7 +549,7 @@ class Scene
             draw_table(fcg::identity());
             glm::mat4 ball_scale = fcg::scaling(2.0f *game::ball_radius);
             for(const Ball&b : physics.active_balls){
-                glm::mat4 ball_mm = fcg::translation(b.pos) * ball_scale;
+                glm::mat4 ball_mm = fcg::translation(b.pos) * glm::toMat4(b.orientation) * ball_scale;
                 Material mat = get_material(b.number);
                 draw_mesh(sphere, ball_mm, mat, "phong", b.number > 8);
             }
