@@ -123,6 +123,7 @@ public:
     CameraMode mode = CameraMode::FREE;
     float aim_phi = 0.0f;
     float aim_theta = 25.0f;
+    float top_phi = 90.0f;
     glm::vec3 aim_target = {0.0f, 0.0f, 0.0f};
 
 private:
@@ -225,10 +226,10 @@ public:
     void view_projection ()
     {
 
-        float ncp = od - 4.0; // distance near clip plane
+        float ncp = od * 0.05f; // distance near clip plane
         if (ncp < 0.0001)
             ncp = 0.0001;
-        float fcp = od + 4.0; // distance far clip plane
+        float fcp = od * 4.0f; // distance far clip plane
 
         // rotation matrix from trackball
         glm::mat4 r;
@@ -239,7 +240,7 @@ public:
                 r = trackball.rotation_matrix();
                 break;
             case CameraMode::TOP:
-                r = fcg::rotation_x(90.0f) * fcg::rotation_y(90.0f);
+                r = fcg::rotation_x(90.0f) * fcg::rotation_y(top_phi);
                 break;
             case CameraMode::AIM:
                 r = fcg::rotation_x(aim_theta) * fcg::rotation_y(aim_phi);
@@ -273,9 +274,42 @@ public:
         send_position();
     }
 
-    void set_view(CameraMode m){
+    void drag(float dx, float dy)
+    {
+        switch(mode){
+            case CameraMode::FREE :
+                return;
+            case CameraMode::AIM :
+                aim_phi += 0.1 * dx;
+                aim_theta += 0.1 * dy;
+                if(aim_theta < 5.0f) aim_theta = 5.0f;
+                if(aim_theta > 70.0f) aim_theta = 70.0f;
+                view_projection();
+                break;
+            case CameraMode::TOP :
+                top_phi += 0.1 * dx;
+                view_projection();
+                break;
+        }
+    }
+
+    void set_view(CameraMode m)
+    {
         mode = m;
-        
+        switch(mode){
+            case CameraMode::FREE :
+                fd = normal_fd;
+                od = fd * 0.8f;
+                break;
+            case CameraMode::AIM :
+                fd = normal_fd;
+                od = 0.3f;
+                break;
+            case CameraMode::TOP :
+                fd = normal_fd;
+                od = fd * 0.7f;
+                break;
+        }
         view_projection();
     }
 
@@ -534,6 +568,14 @@ class Physics{
         {
             active_balls[0].vel = {1.0f, 0.0f, 1.0f};
         }
+
+        bool detect_movement()
+        {
+            for(auto& b : active_balls){
+                if(b.vel.x != 0.0f || b.vel.z != 0.0f) return true;
+            }
+            return false;
+        }
 };
 
 class Scene
@@ -724,19 +766,30 @@ void handle(const sf::Event::KeyPressed& key_pressed, Scene& scene)
     }
 }
 
+bool isDragging = false;
+
 void handle (const sf::Event::MouseButtonPressed& mouse_pressed, Camera& camera)
 {
     if (mouse_pressed.button == sf::Mouse::Button::Right) {
         float x = mouse_pressed.position.x;
         float y = mouse_pressed.position.y;
-        camera.start_rotate (x, y);
+        if(camera.mode == CameraMode::FREE){   
+            camera.start_rotate (x, y);
+        }
+        else{
+            isDragging = true;
+        }
+        
     }
 }
 
 void handle (const sf::Event::MouseButtonReleased& mouse_released, Camera& camera)
 {
-    if (mouse_released.button == sf::Mouse::Button::Right)
+    if (mouse_released.button == sf::Mouse::Button::Right){
         camera.stop_rotate ();
+        isDragging = false;
+    }
+        
 }
 
 void handle (const sf::Event::MouseMoved& mouse_moved, Scene& scene)
@@ -744,8 +797,11 @@ void handle (const sf::Event::MouseMoved& mouse_moved, Scene& scene)
     float x = mouse_moved.position.x;
     float y = mouse_moved.position.y;
 
+    static float prev_x = 0;
     static float prev_y = 0;
-    float dy = y - prev_y; 
+    float dx = x - prev_x;
+    float dy = y - prev_y;
+    prev_x = x; 
     prev_y = y;
 
     if (scene.camera.rotate (x, y))
@@ -755,6 +811,9 @@ void handle (const sf::Event::MouseMoved& mouse_moved, Scene& scene)
     }
     else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::LAlt)) {
         scene.camera.distance (dy);
+    }
+    else if(isDragging){
+        scene.camera.drag(dx, dy);
     }
 }
 
@@ -802,7 +861,7 @@ int main(int argc, char* argv[])
                 handle (*mouse_moved, scene);
             }
         }
-
+        if(scene.physics.detect_movement()) scene.camera.set_view(CameraMode::TOP);
         scene.physics.update(clock.restart().asSeconds());
 
         scene.draw();
