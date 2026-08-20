@@ -23,9 +23,13 @@ namespace game {
     constexpr float table_height = 0.08f;
     constexpr float table_friction = 0.8f;
     constexpr float min_speed = 0.01f;
+    constexpr float max_speed = 2.0f;
+    constexpr float max_cue_movement = 0.3f;
     constexpr float x_boundary = table_length * 0.5f - ball_radius;
     constexpr float z_boundary = table_width * 0.5f - ball_radius;
     constexpr float collision_dist = 2 * ball_radius;
+    constexpr float cue_length = 0.6;
+    constexpr float cue_radius = 0.01;
 }
 
 
@@ -121,7 +125,7 @@ public:
     glm::mat4 inv_v;
     glm::mat4 vp;
     CameraMode mode = CameraMode::FREE;
-    float aim_phi = 0.0f;
+    float aim_phi = 90.0f;
     float aim_theta = 25.0f;
     float top_phi = 90.0f;
     glm::vec3 aim_target = {0.0f, 0.0f, 0.0f};
@@ -303,11 +307,11 @@ public:
                 break;
             case CameraMode::AIM :
                 fd = normal_fd;
-                od = 0.3f;
+                od = 0.5f;
                 break;
             case CameraMode::TOP :
                 fd = normal_fd;
-                od = fd * 0.7f;
+                od = fd * 1.2f;
                 break;
         }
         view_projection();
@@ -546,7 +550,7 @@ class Physics{
 
         void setup_cue()
         {
-            active_balls.push_back(Ball{{- game::table_length * 0.25f, game::ball_radius, 0.0f},{2.0f,0.0f,0.0f},0});
+            active_balls.push_back(Ball{{- game::table_length * 0.25f, game::ball_radius, 0.0f},{0.0f,0.0f,0.0f},0});
         }
 
         void setup_rack()
@@ -564,17 +568,21 @@ class Physics{
             std::swap(active_balls[8].number,active_balls[5].number);
         }
 
-        void set_cueBall_speed()
-        {
-            active_balls[0].vel = {1.0f, 0.0f, 1.0f};
-        }
-
         bool detect_movement()
         {
             for(auto& b : active_balls){
                 if(b.vel.x != 0.0f || b.vel.z != 0.0f) return true;
             }
             return false;
+        }
+
+        void calculate_Shot(float dy, float angle)
+        {   
+            float rad = glm::radians(angle);
+            float x = std::sin(rad);
+            float z = -std::cos(rad);
+            float power = (game::max_speed * dy) / 100.0f;
+            active_balls[0].vel = {x * power, 0.0f, z * power};
         }
 };
 
@@ -602,6 +610,9 @@ class Scene
         Material table_mat = {{0.10f, 0.35f, 0.18f}, {0.03f, 0.09f, 0.05f}, {0.02f, 0.02f, 0.02f}, 4.0f};
         Material rail_mat = {{0.16f, 0.48f, 0.26f}, {0.05f, 0.14f, 0.08f}, {0.08f, 0.08f, 0.08f}, 12.0f};
         Material wood = {{0.30f, 0.18f, 0.10f}, {0.09f, 0.05f, 0.03f}, {0.15f, 0.15f, 0.15f}, 20.0f};
+        Material cue_mat = {{0.75f, 0.60f, 0.40f}, {0.20f, 0.15f, 0.10f}, {0.45f, 0.45f, 0.45f}, 45.0f};
+
+        float cue_displacement = 0.0f;
 
     public:
         Scene(fcg::Shaders& shaders) : 
@@ -731,12 +742,12 @@ class Scene
         void draw_cue(glm::mat4 parent_mm)
         {
             glm::mat4 mm;
-            glm::mat4 scale = fcg::scaling(0.02, 0.02, 0.6);
-            float cue_offset = 0.3f + game::ball_radius;
+            glm::mat4 scale = fcg::scaling(game::cue_radius, game::cue_radius, game::cue_length);
+            float cue_offset = 0.3f + game::ball_radius + cue_displacement * (game::max_cue_movement/100.0f);
             glm::mat4 translate = fcg::translation(0.0f, 0.0f, cue_offset);
             glm::vec3 cue_pos = physics.active_balls[0].pos;
             mm = parent_mm *  fcg::translation(cue_pos) * fcg::rotation_y(-camera.aim_phi) * fcg::rotation_x(-camera.aim_theta + 5.0f) *  translate  * scale;
-            draw_mesh(cube, mm, wood, "phong");
+            draw_mesh(cube, mm, cue_mat, "phong");
         }
 };
 
@@ -771,38 +782,56 @@ void handle(const sf::Event::KeyPressed& key_pressed, Scene& scene)
         scene.camera.aim_target = {0.0f, 0.0f, 0.0f};
         scene.camera.set_view(CameraMode::TOP);
         break;
-    case sf::Keyboard::Scancode::Space:
-        scene.physics.set_cueBall_speed();
-        break;
     default:
         return;
     }
 }
 
 bool isDragging = false;
+bool isShooting = false;
+float startShoot = 0.0f;
+float endShoot = 0.0f;
 
 void handle (const sf::Event::MouseButtonPressed& mouse_pressed, Camera& camera)
 {
+    float x = mouse_pressed.position.x;
+    float y = mouse_pressed.position.y;
     if (mouse_pressed.button == sf::Mouse::Button::Right) {
-        float x = mouse_pressed.position.x;
-        float y = mouse_pressed.position.y;
+        
         if(camera.mode == CameraMode::FREE){   
             camera.start_rotate (x, y);
         }
         else{
             isDragging = true;
         }
-        
+    }
+    else if (mouse_pressed.button == sf::Mouse::Button::Left) {
+        if(camera.mode != CameraMode::AIM) return;
+        else{
+            isDragging = false;
+            isShooting = true;
+            startShoot = y;
+            endShoot = y;
+        }
     }
 }
 
-void handle (const sf::Event::MouseButtonReleased& mouse_released, Camera& camera)
+void handle (const sf::Event::MouseButtonReleased& mouse_released, Scene& scene)
 {
     if (mouse_released.button == sf::Mouse::Button::Right){
-        camera.stop_rotate ();
+        scene.camera.stop_rotate ();
         isDragging = false;
     }
-        
+    else if(mouse_released.button == sf::Mouse::Button::Left){
+        scene.cue_displacement = 0.0f;
+        isShooting = false;
+        float dy = endShoot - startShoot;
+        if(dy <= 0.0f) return;
+        else {
+            if(dy >= 100.0f) dy = 100.0f;
+            scene.physics.calculate_Shot(dy, scene.camera.aim_phi);
+        }
+    }    
 }
 
 void handle (const sf::Event::MouseMoved& mouse_moved, Scene& scene)
@@ -828,6 +857,12 @@ void handle (const sf::Event::MouseMoved& mouse_moved, Scene& scene)
     else if(isDragging){
         scene.camera.drag(dx, dy);
     }
+    else if(isShooting){
+        endShoot = y;
+        scene.cue_displacement += dy * 0.5f;
+        if(scene.cue_displacement <= 0.0f) scene.cue_displacement = 0.0f;
+        if(scene.cue_displacement >= 100.0f) scene.cue_displacement = 100.0f;
+    }
 }
 
 ////////
@@ -840,8 +875,8 @@ int main(int argc, char* argv[])
     sf::Window& window = *setup.window;
 
     fcg::Shaders shaders;
-    shaders.add("phong","../Tappa07/vertex_shader.vert","../Tappa07/fragment_phong.frag");
-    shaders.add("flat","../Tappa07/vertex_shader.vert","../Tappa07/fragment_flat.frag");
+    shaders.add("phong","../Tappa08/vertex_shader.vert","../Tappa08/fragment_phong.frag");
+    shaders.add("flat","../Tappa08/vertex_shader.vert","../Tappa08/fragment_flat.frag");
     shaders.use("flat");
     Scene scene (shaders);
 
@@ -868,7 +903,7 @@ int main(int argc, char* argv[])
                 handle (*mouse_pressed, scene.camera);
             }
             else if(const auto* mouse_released = event->getIf<sf::Event::MouseButtonReleased> ()){
-                handle (*mouse_released, scene.camera);
+                handle (*mouse_released, scene);
             }
             else if(const auto* mouse_moved = event->getIf<sf::Event::MouseMoved> ()){
                 handle (*mouse_moved, scene);
