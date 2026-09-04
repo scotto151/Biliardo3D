@@ -236,7 +236,9 @@ namespace fcg
                 "model", "vp", "tr_inv_model", "camera_pos",
                 "light.direct_pos", "light.direct_val", "light.ambient_val",
                 "material.diffuse", "material.ambient", "material.specular", "material.shininess",
-                "isStriped"
+                "isStriped",
+                "cut_pocket", "pockets_pos[0]", "pockets_pos[1]", "pockets_pos[2]", "pockets_pos[3]", "pockets_pos[4]", "pockets_pos[5]",
+                "pocket_radius"
             };
 
             for (auto n : names)
