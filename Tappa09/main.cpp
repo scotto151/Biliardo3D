@@ -36,9 +36,10 @@ namespace game {
         {-table_length * 0.5f, 0.0f, table_width * 0.5f},
         {table_length * 0.5f, 0.0f, -table_width * 0.5f},
         {table_length * 0.5f, 0.0f, table_width * 0.5f},
-        {0.0f, 0.0f, (-table_width - rail_width * 0.5f) * 0.5f},
-        {0.0f, 0.0f, (table_width + rail_width * 0.5f) * 0.5f}
+        {0.0f, 0.0f, -table_width * 0.5f},
+        {0.0f, 0.0f, table_width  * 0.5f}
     };
+    bool reset_cue_ball = false;
 }
 
 
@@ -470,6 +471,7 @@ struct Ball{
     glm::vec3 vel;
     int number;
     glm::quat orientation = glm::quat (1.0f, 0.0f, 0.0f, 0.0f);
+    bool potted = false;
 };
 
 class Physics{
@@ -496,31 +498,63 @@ class Physics{
                 if(std::abs(b.vel.x)<game::min_speed) b.vel.x = 0.0f;
                 if(std::abs(b.vel.z)<game::min_speed) b.vel.z = 0.0f; 
             }
-
+            detect_pockets();
             detect_rail_collisions();
             detect_ball_collisions();
+            if(game::reset_cue_ball && !detect_movement()){
+                active_balls[0].pos = {-game::table_length * 0.25f, game::ball_radius, 0.0f};
+                game::reset_cue_ball = false;
+                active_balls[0].potted = false;
+            }
         }
 
         void detect_rail_collisions()
         {
             for(auto& b : active_balls)
             {
-                if(b.pos.x > game::x_boundary){
-                    b.vel.x *= -1.0f;
-                    b.pos.x = game::x_boundary;
+                if(b.potted) continue;
+                bool near_pocket = false;
+                for(auto p : game::pockets_pos){
+                    float dx = b.pos.x - p.x;
+                    float dz = b.pos.z - p.z;
+                    if(dx*dx + dz*dz < game::pocket_radius * game::pocket_radius){
+                        near_pocket = true;
+                        break;
+                    }
                 }
-                if(b.pos.x < -game::x_boundary){
-                    b.vel.x *= -1.0f;
-                    b.pos.x = -game::x_boundary;
+                if(!near_pocket){
+                    if(b.pos.x > game::x_boundary){
+                        b.vel.x *= -1.0f;
+                        b.pos.x = game::x_boundary;
+                    }
+                    if(b.pos.x < -game::x_boundary){
+                        b.vel.x *= -1.0f;
+                        b.pos.x = -game::x_boundary;
+                    }
+                    if(b.pos.z > game::z_boundary){
+                        b.vel.z *= -1.0f;
+                        b.pos.z = game::z_boundary;
+                    }
+                    if(b.pos.z < -game::z_boundary){
+                        b.vel.z *= -1.0f;
+                        b.pos.z = -game::z_boundary;
+                    }
                 }
-                if(b.pos.z > game::z_boundary){
-                    b.vel.z *= -1.0f;
-                    b.pos.z = game::z_boundary;
+                else{
+                    if(b.pos.x > game::x_boundary){
+                        b.vel.z *= -1.0f;
+                    }
+                    if(b.pos.x < -game::x_boundary){
+                        b.vel.z *= -1.0f;
+                    }
+                    if(b.pos.z > game::z_boundary){
+                        b.vel.x *= -1.0f;
+                    }
+                    if(b.pos.z < -game::z_boundary){
+                        b.vel.x *= -1.0f;
+                    }
                 }
-                if(b.pos.z < -game::z_boundary){
-                    b.vel.z *= -1.0f;
-                    b.pos.z = -game::z_boundary;
-                }
+                
             }
         }
 
@@ -528,7 +562,9 @@ class Physics{
         {
             for(int i = 0; i < active_balls.size(); i++)
             {
+                if(active_balls[i].potted) continue;
                 for(int j = i + 1; j < active_balls.size(); j++){
+                    if(active_balls[j].potted) continue;
                     Ball& a = active_balls[i];
                     Ball& b = active_balls[j];
 
@@ -580,6 +616,7 @@ class Physics{
         bool detect_movement()
         {
             for(auto& b : active_balls){
+                if(b.potted) continue;
                 if(b.vel.x != 0.0f || b.vel.z != 0.0f) return true;
             }
             return false;
@@ -592,6 +629,29 @@ class Physics{
             float z = -std::cos(rad);
             float power = (game::max_speed * dy) / 100.0f;
             active_balls[0].vel = {x * power, 0.0f, z * power};
+        }
+
+        void detect_pockets()
+        {
+            for(int i = 0; i < active_balls.size(); i++){
+                if(active_balls[i].potted) continue;
+                for(auto p : game::pockets_pos){
+                    float dx = active_balls[i].pos.x - p.x;
+                    float dz = active_balls[i].pos.z - p.z;
+                    if(dx*dx + dz*dz < game::pocket_radius * game::pocket_radius){
+                        active_balls[i].potted = true;
+                        if(i==0){
+                            game::reset_cue_ball = true;
+                        }
+                        active_balls[i].pos.x = p.x;
+                        active_balls[i].pos.z = p.z;
+                        active_balls[i].vel = {0.0f, 0.0f, 0.0f};
+                        active_balls[i].orientation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+                        //sink_ball()
+                        break;
+                    }
+                }
+            }
         }
 };
 
@@ -644,6 +704,7 @@ class Scene
             draw_table(fcg::identity());
             glm::mat4 ball_scale = fcg::scaling(2.0f *game::ball_radius);
             for(const Ball&b : physics.active_balls){
+                if(b.potted) continue;
                 glm::mat4 ball_mm = fcg::translation(b.pos) * glm::toMat4(b.orientation) * ball_scale;
                 Material mat = get_material(b.number);
                 draw_mesh(sphere, ball_mm, mat, "phong", b.number > 8);
