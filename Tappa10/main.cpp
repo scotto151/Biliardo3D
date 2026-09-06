@@ -509,11 +509,6 @@ class Physics{
             detect_rail_collisions();
             detect_ball_collisions();
             update_sinking(dt);
-            if(game::reset_cue_ball && !detect_movement()){
-                active_balls[0].pos = {-game::table_length * 0.25f, game::ball_radius, 0.0f};
-                active_balls[0].state = BallState::ACTIVE;
-                game::reset_cue_ball = false;
-            }
         }
 
         void detect_rail_collisions()
@@ -687,9 +682,6 @@ class Physics{
                         potted_current_turn.push_back(b);
                         b.vel = {0.0f, 0.0f, 0.0f};
                         b.orientation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-                        if(b.number == 0){
-                            game::reset_cue_ball = true;
-                        }
                     }
                 }
             }
@@ -710,6 +702,7 @@ class GameState
     Player players[2];
     int current_player = 0;
     bool isBreak = true;
+    bool legally_8_potted;
 
     GameState(){
         players[0].cue_material = {{0.75f, 0.60f, 0.40f}, {0.20f, 0.15f, 0.10f}, {0.45f, 0.45f, 0.45f}, 45.0f};
@@ -718,23 +711,35 @@ class GameState
 
     void resolve_shot(Physics& physics)
     {
+        bool foul = false;
         if(physics.first_hit==-1){
-            current_player = (current_player + 1) % 2;
+            foul = true;
         }
         else{
             int hit_number = physics.active_balls[physics.first_hit].number;
             if(hit_number < 8 && players[current_player].group == Group::STRIPED){
-                current_player = (current_player + 1) % 2;
+                foul = true;
             }
             else if(hit_number > 8 && players[current_player].group == Group::SOLID){
-                current_player = (current_player + 1) % 2;
+                foul = true;
             }
             else if(hit_number == 8 && players[current_player].group != Group::NONE){
-                current_player = (current_player + 1) % 2;
+                for(auto& b : physics.active_balls){
+                    if(players[current_player].group == Group::SOLID && b.number > 0 && b.number < 8 & b.state != BallState::POTTED){
+                        foul = true;
+                        break;
+                    }
+                    if(players[current_player].group == Group::STRIPED && b.number > 8 & b.state != BallState::POTTED){
+                        foul = true;
+                        break;
+                    }
+                    if(players[current_player].group == Group::NONE && !legally_8_potted){
+                        foul = true;
+                    }
+                }
             }
         }
         
-        physics.first_hit = -1;
         if(!physics.potted_current_turn.empty()){
             if(players[current_player].group == Group::NONE){
                 if(physics.potted_current_turn[0].number < 8 && physics.potted_current_turn[0].number > 0){
@@ -747,9 +752,70 @@ class GameState
                 }
             }
         }
+        
+        bool potted_own = false;
+        for(auto& b : physics.potted_current_turn){
+            if(players[current_player].group == Group::SOLID && b.number > 0 && b.number < 8){
+                potted_own = true;
+            }
+            if(players[current_player].group == Group::STRIPED && b.number > 8){
+                potted_own = true;
+            }
+            if(b.number == 0){
+                foul = true;
+                physics.active_balls[0].pos = {- game::table_length * 0.25f, game::ball_radius, 0.0f};
+                physics.active_balls[0].state = BallState::ACTIVE;
+                physics.active_balls[0].vel = {0.0f, 0.0f, 0.0f};
+            }
+            if(b.number == 8){
+                if(isBreak){
+                    legally_8_potted = true;
+                }
+                bool ended_group = true;
+                for(auto& b : physics.active_balls){
+                    if(players[current_player].group == Group::SOLID && b.number > 0 && b.number < 8 & b.state != BallState::POTTED){
+                        ended_group = false;
+                        break;
+                    }
+                    if(players[current_player].group == Group::STRIPED && b.number > 8 & b.state != BallState::POTTED){
+                        ended_group = false;
+                        break;
+                    }
+                    if(players[current_player].group == Group::NONE && !legally_8_potted){
+                        ended_group = false;
+                    }
+                }
+                if(!ended_group){
+                    //gameOver();
+                    std::cerr << "Giocatore " << current_player + 1 << ": Hai imbucato la biglia nera prima di aver imbucato tutto il tuo gruppo. Hai perso! " << std::endl;
+                    std::exit(0);
+                }
+                else{
+                    legally_8_potted = true;
+                }
+            }
+        }
 
+        if(legally_8_potted && !foul){
+            //win();
+            std::cerr << "Giocatore " << current_player + 1 << ": Hai vinto!" << std::endl;
+            std::exit(0);
+        }
+        else if(legally_8_potted && foul){
+            //gameOver();
+            std::cerr << "Giocatore " << current_player + 1 << ": Hai imbucato la nera commettendo fallo. Hai perso!" << std::endl;
+            std::exit(0);
+        }
+        if(!potted_own){
+            current_player = (current_player + 1) % 2;
+        }
+        else if(foul) {
+            current_player = (current_player + 1) % 2;
+        }
 
+        physics.first_hit = -1;
         if(isBreak) isBreak = false;
+
     }
 };
 
