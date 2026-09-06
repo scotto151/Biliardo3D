@@ -466,12 +466,15 @@ protected:
     }
 };
 
+enum class BallState  {ACTIVE, SINKING, POTTED};
+
 struct Ball{
     glm::vec3 pos;
     glm::vec3 vel;
     int number;
     glm::quat orientation = glm::quat (1.0f, 0.0f, 0.0f, 0.0f);
-    bool potted = false;
+    BallState state = BallState::ACTIVE;
+    glm::vec3 sink_target = {0.0f, 0.0f, 0.0f};
 };
 
 class Physics{
@@ -487,6 +490,7 @@ class Physics{
         void update(float dt)
         {
             for(auto& b : active_balls){
+                if(b.state == BallState::POTTED || b.state == BallState::SINKING) continue;
                 b.pos += b.vel * dt;
                 float speed = std::sqrt(b.vel.x * b.vel.x + b.vel.z * b.vel.z);
                 if(speed > game::min_speed){
@@ -501,10 +505,11 @@ class Physics{
             detect_pockets();
             detect_rail_collisions();
             detect_ball_collisions();
+            update_sinking(dt);
             if(game::reset_cue_ball && !detect_movement()){
                 active_balls[0].pos = {-game::table_length * 0.25f, game::ball_radius, 0.0f};
+                active_balls[0].state = BallState::ACTIVE;
                 game::reset_cue_ball = false;
-                active_balls[0].potted = false;
             }
         }
 
@@ -512,7 +517,7 @@ class Physics{
         {
             for(auto& b : active_balls)
             {
-                if(b.potted) continue;
+                if(b.state == BallState::POTTED) continue;
                 bool near_pocket = false;
                 for(auto p : game::pockets_pos){
                     float dx = b.pos.x - p.x;
@@ -562,9 +567,9 @@ class Physics{
         {
             for(int i = 0; i < active_balls.size(); i++)
             {
-                if(active_balls[i].potted) continue;
+                if(active_balls[i].state == BallState::POTTED || active_balls[i].state == BallState::SINKING) continue;
                 for(int j = i + 1; j < active_balls.size(); j++){
-                    if(active_balls[j].potted) continue;
+                    if(active_balls[j].state == BallState::POTTED || active_balls[j].state == BallState::SINKING) continue;
                     Ball& a = active_balls[i];
                     Ball& b = active_balls[j];
 
@@ -616,7 +621,7 @@ class Physics{
         bool detect_movement()
         {
             for(auto& b : active_balls){
-                if(b.potted) continue;
+                if(b.state == BallState::POTTED) continue;
                 if(b.vel.x != 0.0f || b.vel.z != 0.0f) return true;
             }
             return false;
@@ -634,21 +639,46 @@ class Physics{
         void detect_pockets()
         {
             for(int i = 0; i < active_balls.size(); i++){
-                if(active_balls[i].potted) continue;
+                if(active_balls[i].state == BallState::POTTED || active_balls[i].state == BallState::SINKING) continue;
                 for(auto p : game::pockets_pos){
                     float dx = active_balls[i].pos.x - p.x;
                     float dz = active_balls[i].pos.z - p.z;
                     if(dx*dx + dz*dz < game::pocket_radius * game::pocket_radius){
-                        active_balls[i].potted = true;
-                        if(i==0){
+                        active_balls[i].state = BallState::SINKING;
+                        glm::vec3 dir = glm::vec3(p.x,0.0f,p.z) - active_balls[i].pos;
+                        float speed = std::sqrt(active_balls[i].vel.x * active_balls[i].vel.x + active_balls[i].vel.z * active_balls[i].vel.z);
+                        if(speed < game::min_speed) speed = 0.3f;
+                        active_balls[i].vel = glm::normalize(dir) * speed;
+                        active_balls[i].sink_target = {p.x, 0.0f, p.z};
+                        break;
+                    }
+                }
+            }
+        }
+
+        void update_sinking(float dt)
+        {
+            for(auto& b : active_balls){
+                if(b.state != BallState::SINKING) continue;
+
+                float dx = b.sink_target.x - b.pos.x;
+                float dz = b.sink_target.z - b.pos.z;
+
+                if(dx * b.vel.x + dz * b.vel.z > 0.0f){
+                    b.pos.x += b.vel.x * dt;
+                    b.pos.z += b.vel.z * dt;
+                }
+                else{
+                    b.pos.x = b.sink_target.x;
+                    b.pos.z = b.sink_target.z;
+                    b.pos.y -= 0.1f * dt;
+                    if(b.pos.y < -game::table_height * 0.5f){
+                        b.state = BallState::POTTED;
+                        b.vel = {0.0f, 0.0f, 0.0f};
+                        b.orientation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+                        if(b.number == 0){
                             game::reset_cue_ball = true;
                         }
-                        active_balls[i].pos.x = p.x;
-                        active_balls[i].pos.z = p.z;
-                        active_balls[i].vel = {0.0f, 0.0f, 0.0f};
-                        active_balls[i].orientation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-                        //sink_ball()
-                        break;
                     }
                 }
             }
@@ -704,7 +734,7 @@ class Scene
             draw_table(fcg::identity());
             glm::mat4 ball_scale = fcg::scaling(2.0f *game::ball_radius);
             for(const Ball&b : physics.active_balls){
-                if(b.potted) continue;
+                if(b.state == BallState::POTTED) continue;
                 glm::mat4 ball_mm = fcg::translation(b.pos) * glm::toMat4(b.orientation) * ball_scale;
                 Material mat = get_material(b.number);
                 draw_mesh(sphere, ball_mm, mat, "phong", b.number > 8);
