@@ -1160,6 +1160,7 @@ void handle (const sf::Event::MouseButtonReleased& mouse_released, Scene& scene)
         isDragging = false;
     }
     else if(mouse_released.button == sf::Mouse::Button::Left){
+        if(scene.camera.mode != CameraMode::AIM) return;
         scene.cue_displacement = 0.0f;
         isShooting = false;
         float dy = endShoot - startShoot;
