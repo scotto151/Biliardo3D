@@ -747,7 +747,7 @@ class GameState
                         foul = true;
                         break;
                     }
-                    if(players[current_player].group == Group::STRIPED && b.number > 8 & b.state != BallState::POTTED){
+                    if(players[current_player].group == Group::STRIPED && b.number > 8 && b.state != BallState::POTTED){
                         foul = true;
                         break;
                     }
@@ -793,7 +793,7 @@ class GameState
                             ended_group = false;
                             break;
                         }
-                        if(players[current_player].group == Group::STRIPED && b.number > 8 & b.state != BallState::POTTED){
+                        if(players[current_player].group == Group::STRIPED && b.number > 8 && b.state != BallState::POTTED){
                             ended_group = false;
                             break;
                         }
