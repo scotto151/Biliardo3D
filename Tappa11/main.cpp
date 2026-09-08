@@ -720,6 +720,7 @@ class GameState
     int current_player = 0;
     bool isBreak = true;
     bool legally_8_potted = false;
+    bool cue_to_reset = false;
 
     GameState(){
         players[0].cue_material = {{0.75f, 0.60f, 0.40f}, {0.20f, 0.15f, 0.10f}, {0.45f, 0.45f, 0.45f}, 45.0f};
@@ -780,9 +781,6 @@ class GameState
             }
             if(b.number == 0){
                 foul = true;
-                physics.active_balls[0].pos = {- game::table_length * 0.25f, game::ball_radius, 0.0f};
-                physics.active_balls[0].state = BallState::ACTIVE;
-                physics.active_balls[0].vel = {0.0f, 0.0f, 0.0f};
             }
             if(b.number == 8){
                 if(isBreak){
@@ -825,13 +823,13 @@ class GameState
             std::cerr << "Giocatore " << current_player + 1 << ": Hai imbucato la nera commettendo fallo. Hai perso!" << std::endl;
             std::exit(0);
         }
-        if(!potted_own){
+        if(foul) {
+            current_player = (current_player + 1) % 2;
+            cue_to_reset = true;
+        }
+        else if(!potted_own){
             current_player = (current_player + 1) % 2;
         }
-        else if(foul) {
-            current_player = (current_player + 1) % 2;
-        }
-
         physics.first_hit = -1;
         if(isBreak) isBreak = false;
 
@@ -1055,6 +1053,7 @@ void handle(const sf::Event::KeyPressed& key_pressed, Scene& scene)
     case sf::Keyboard::Scancode::Escape:
         exit (0);
     case sf::Keyboard::Scancode::A:
+        if(scene.game_state.cue_to_reset) return;
         scene.camera.aim_target = scene.physics.active_balls[0].pos;
         scene.camera.set_view(CameraMode::AIM);
         break;
@@ -1065,6 +1064,60 @@ void handle(const sf::Event::KeyPressed& key_pressed, Scene& scene)
     case sf::Keyboard::Scancode::T:
         scene.camera.aim_target = {0.0f, 0.0f, 0.0f};
         scene.camera.set_view(CameraMode::TOP);
+        break;
+    case sf::Keyboard::Scancode::Up:
+        if(!scene.game_state.cue_to_reset){
+            return;
+        }
+        else{
+            scene.physics.active_balls[0].pos.x += 0.01f;
+            if(scene.physics.active_balls[0].pos.x >= game::x_boundary) scene.physics.active_balls[0].pos.x = game::x_boundary;
+        }
+        break;
+    case sf::Keyboard::Scancode::Right:
+        if(!scene.game_state.cue_to_reset){
+            return;
+        }
+        else{
+            scene.physics.active_balls[0].pos.z += 0.01f;
+            if(scene.physics.active_balls[0].pos.z >= game::z_boundary) scene.physics.active_balls[0].pos.z = game::z_boundary;
+        }
+        break;
+    case sf::Keyboard::Scancode::Left:
+        if(!scene.game_state.cue_to_reset){
+            return;
+        }
+        else{
+            scene.physics.active_balls[0].pos.z -= 0.01f;
+            if(scene.physics.active_balls[0].pos.z <= -game::z_boundary) scene.physics.active_balls[0].pos.z = -game::z_boundary;
+        }
+        break;
+    case sf::Keyboard::Scancode::Down:
+        if(!scene.game_state.cue_to_reset){
+            return;
+        }
+        else{
+            scene.physics.active_balls[0].pos.x -= 0.01f;
+            if(scene.physics.active_balls[0].pos.x <= -game::x_boundary) scene.physics.active_balls[0].pos.x = -game::x_boundary;
+        }
+        break;
+    case sf::Keyboard::Scancode::Enter:
+        if(!scene.game_state.cue_to_reset){
+            return;
+        }
+        for(auto& b : scene.physics.active_balls){
+            if(b.state != BallState::ACTIVE) continue;
+            if(b.number == 0) continue;
+            float dx = b.pos.x - scene.physics.active_balls[0].pos.x;
+            float dz = b.pos.z - scene.physics.active_balls[0].pos.z;
+            if(dx * dx + dz * dz < game::collision_dist * game::collision_dist) return;
+        }
+        for(auto& p : game::pockets_pos){
+            float dx = p.x - scene.physics.active_balls[0].pos.x;
+            float dz = p.z - scene.physics.active_balls[0].pos.z;
+            if(dx * dx + dz* dz < game::pocket_radius * game::pocket_radius) return;
+        }
+        scene.game_state.cue_to_reset = false;
         break;
     default:
         return;
@@ -1197,9 +1250,21 @@ int main(int argc, char* argv[])
         if(scene.physics.detect_movement()) scene.camera.set_view(CameraMode::TOP);
         else if (scene.physics.shot_in_progress){
             scene.game_state.resolve_shot(scene.physics);
+            if(scene.game_state.cue_to_reset){
+                scene.physics.active_balls[0].state = BallState::ACTIVE;
+                scene.physics.active_balls[0].vel = {0.0f, 0.0f, 0.0f};
+                scene.physics.active_balls[0].orientation = glm::quat {1.0f, 0.0f, 0.0f, 0.0f};
+                scene.physics.active_balls[0].pos = {0.0f, game::ball_radius, 0.0f};
+            }
             scene.physics.shot_in_progress = false;
         }
-        scene.physics.update(clock.restart().asSeconds());
+        if(!scene.game_state.cue_to_reset){
+            scene.physics.update(clock.restart().asSeconds());
+        }
+        else{
+            clock.restart();
+        }
+        
 
         scene.draw();
         window.display();
