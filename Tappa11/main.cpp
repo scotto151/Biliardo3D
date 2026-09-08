@@ -785,6 +785,8 @@ class GameState
             if(b.number == 8){
                 if(isBreak){
                     legally_8_potted = true;
+                    std::cerr << "Giocatore " << current_player + 1 << ": Hai vinto!" << std::endl;
+                    std::exit(0);
                 }
                 else{
                     bool ended_group = true;
@@ -802,7 +804,6 @@ class GameState
                         }
                     }
                     if(!ended_group){
-                        //gameOver();
                         std::cerr << "Giocatore " << current_player + 1 << ": Hai imbucato la biglia nera prima di aver imbucato tutto il tuo gruppo. Hai perso! " << std::endl;
                         std::exit(0);
                     }
@@ -814,12 +815,10 @@ class GameState
         }
 
         if(legally_8_potted && !foul){
-            //win();
             std::cerr << "Giocatore " << current_player + 1 << ": Hai vinto!" << std::endl;
             std::exit(0);
         }
         else if(legally_8_potted && foul){
-            //gameOver();
             std::cerr << "Giocatore " << current_player + 1 << ": Hai imbucato la nera commettendo fallo. Hai perso!" << std::endl;
             std::exit(0);
         }
